@@ -1,19 +1,23 @@
-import { useState } from 'react';
-import { getNewsArticle } from '../api/client.js';
-import { useFetch } from '../hooks/useFetch.js';
-import './NewsCard.css';
+import { useState } from "react";
+import { getNewsArticle } from "../api/client.js";
+import { useFetch } from "../hooks/useFetch.js";
+import "./NewsCard.css";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDate(iso) {
   if (!iso) return null;
-  return new Intl.DateTimeFormat('en-CH', {
-    day: 'numeric', month: 'long', year: 'numeric',
+  return new Intl.DateTimeFormat("en-CH", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   }).format(new Date(iso));
 }
 
 function excerpt(text, maxChars = 120) {
   if (!text) return null;
-  return text.length <= maxChars ? text : text.slice(0, maxChars).trimEnd() + '…';
+  return text.length <= maxChars
+    ? text
+    : text.slice(0, maxChars).trimEnd() + "…";
 }
 
 // ── Comment inside article drawer ─────────────────────────────────────────────
@@ -21,8 +25,10 @@ function Comment({ comment }) {
   return (
     <div className="article-comment">
       <div className="article-comment__avatar" aria-hidden="true">
-        {(comment.author?.username ?? comment.user_id ?? '?')
-          .toString().charAt(0).toUpperCase()}
+        {(comment.author?.username ?? comment.user_id ?? "?")
+          .toString()
+          .charAt(0)
+          .toUpperCase()}
       </div>
       <div className="article-comment__body">
         <span className="article-comment__author">
@@ -43,16 +49,25 @@ function Comment({ comment }) {
 function ArticleDrawer({ articleId, title, onClose }) {
   const { data, loading, error } = useFetch(
     () => getNewsArticle(articleId),
-    [articleId]
+    [articleId],
   );
 
-  const article  = data;
+  const article = data;
   const comments = article?.comments ?? [];
 
   return (
-    <div className="article-overlay" role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      className="article-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       {/* Backdrop */}
-      <div className="article-overlay__backdrop" onClick={onClose} aria-hidden="true" />
+      <div
+        className="article-overlay__backdrop"
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
       <div className="article-drawer">
         {/* Handle */}
@@ -66,9 +81,16 @@ function ArticleDrawer({ articleId, title, onClose }) {
             onClick={onClose}
             aria-label="Close article"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <path d="M18 6 6 18M6 6l12 12"/>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -78,8 +100,11 @@ function ArticleDrawer({ articleId, title, onClose }) {
           {loading && (
             <div className="article-drawer__loading">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="skeleton article-drawer__skel-line"
-                  style={{ width: i === 3 ? '55%' : '100%' }} />
+                <div
+                  key={i}
+                  className="skeleton article-drawer__skel-line"
+                  style={{ width: i === 3 ? "55%" : "100%" }}
+                />
               ))}
             </div>
           )}
@@ -99,7 +124,8 @@ function ArticleDrawer({ articleId, title, onClose }) {
                   alt={article.title}
                   className="article-drawer__photo"
                   loading="lazy"
-                  width="680" height="300"
+                  width="680"
+                  height="300"
                 />
               )}
 
@@ -116,22 +142,27 @@ function ArticleDrawer({ articleId, title, onClose }) {
               {/* Body */}
               {article.body ? (
                 <div className="article-drawer__content">
-                  {article.body.split('\n').filter(Boolean).map((para, i) => (
-                    <p key={i}>{para}</p>
-                  ))}
+                  {article.body
+                    .split("\n")
+                    .filter(Boolean)
+                    .map((para, i) => (
+                      <p key={i}>{para}</p>
+                    ))}
                 </div>
               ) : (
-                <p className="article-drawer__empty-body">No content available.</p>
+                <p className="article-drawer__empty-body">
+                  No content available.
+                </p>
               )}
 
               {/* Comments */}
               {comments.length > 0 && (
                 <section className="article-drawer__comments">
                   <h3 className="article-drawer__comments-title">
-                    {comments.length} comment{comments.length !== 1 ? 's' : ''}
+                    {comments.length} comment{comments.length !== 1 ? "s" : ""}
                   </h3>
                   <div className="article-drawer__comments-list">
-                    {comments.map(c => (
+                    {comments.map((c) => (
                       <Comment key={c.id} comment={c} />
                     ))}
                   </div>
@@ -157,13 +188,21 @@ export default function NewsCard({ article, featured = false }) {
   const dateStr = formatDate(article.published_at ?? article.created_at);
   const bodyExcerpt = excerpt(article.body, featured ? 160 : 110);
 
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+  function toAbsolute(url) {
+    if (!url) return null;
+    if (url.startsWith("http")) return url;
+    return `${BASE_URL}${url}`;
+  }
+
   return (
     <>
       <article
-        className={`news-card${featured ? ' news-card--featured' : ''}`}
+        className={`news-card${featured ? " news-card--featured" : ""}`}
         onClick={() => setOpen(true)}
         tabIndex="0"
-        onKeyDown={e => e.key === 'Enter' && setOpen(true)}
+        onKeyDown={(e) => e.key === "Enter" && setOpen(true)}
         role="button"
         aria-label={`Read: ${article.title}`}
       >
@@ -171,11 +210,12 @@ export default function NewsCard({ article, featured = false }) {
         {article.photo_url && (
           <div className="news-card__photo-wrap">
             <img
-              src={article.photo_url}
+              src={toAbsolute(article.photo_url)}
               alt={article.title}
               className="news-card__photo"
               loading="lazy"
-              width="680" height="220"
+              width="680"
+              height="220"
             />
           </div>
         )}
@@ -188,16 +228,21 @@ export default function NewsCard({ article, featured = false }) {
         <div className="news-card__body">
           <span className="news-card__tag">Campus Motion</span>
           <h3 className="news-card__title">{article.title}</h3>
-          {bodyExcerpt && (
-            <p className="news-card__excerpt">{bodyExcerpt}</p>
-          )}
+          {bodyExcerpt && <p className="news-card__excerpt">{bodyExcerpt}</p>}
           <div className="news-card__footer">
             {dateStr && <span className="news-card__date">{dateStr}</span>}
             <span className="news-card__read-more">
               Read more
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                <path d="M5 12h14M12 5l7 7-7 7"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>
             </span>
           </div>
