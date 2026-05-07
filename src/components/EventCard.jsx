@@ -445,13 +445,14 @@ function JoinModal({ event, icon, savedJoin, onClose, onJoined, onLeft }) {
 }
 
 // ── Guest participants preview ────────────────────────────────────────────────
-function GuestPreview({ eventId, refreshKey }) {
+function GuestPreview({ eventId, refreshKey, onTotal }) {
   const [guests, setGuests] = useState([]);
 
   const load = useCallback(async () => {
     try {
       const data = await getEventGuests(eventId);
       setGuests(Array.isArray(data) ? data : (data.data ?? []));
+      if (onTotal) onTotal(data?.meta?.total ?? 0);
     } catch {
       /* silent */
     }
@@ -496,7 +497,6 @@ export default function EventCard({ event, locationMap = {} }) {
   const [showModal, setShowModal] = useState(false);
   const [savedJoin, setSavedJoin] = useState(() => getSavedJoin(event.id));
   const [refreshKey, setRefreshKey] = useState(0);
-  const [countDelta, setCountDelta] = useState(0);
 
   const sportTag = detectSportTag(event.title, event.body);
   const icon = (sportTag && SPORT_EMOJIS[sportTag]) ?? "⚡";
@@ -505,7 +505,9 @@ export default function EventCard({ event, locationMap = {} }) {
   const dateStr = formatDate(event.start_time);
   const distanceStr = formatDistance(event.distance_m);
   const durationStr = formatDuration(event.start_time, event.end_time);
-  const participants = (event.participant_count ?? 0) + countDelta;
+  const [participants, setParticipants] = useState(
+    event.participant_count ?? 0,
+  );
 
   const startLoc = resolveLocation(event.start_location_id, locationMap);
   const endLoc = resolveLocation(event.end_location_id, locationMap);
@@ -591,8 +593,11 @@ export default function EventCard({ event, locationMap = {} }) {
           </ul>
 
           {/* Guest preview row */}
-          <GuestPreview eventId={event.id} refreshKey={refreshKey} />
-
+          <GuestPreview
+            eventId={event.id}
+            refreshKey={refreshKey}
+            onTotal={(total) => setParticipants(total)}
+          />
           {stravaUrl && (
             <div className="event-card__footer">
               <a
@@ -620,12 +625,10 @@ export default function EventCard({ event, locationMap = {} }) {
           onJoined={(data) => {
             setSavedJoin(data);
             setRefreshKey((k) => k + 1);
-            setCountDelta((d) => d + 1);
           }}
           onLeft={() => {
             setSavedJoin(null);
             setRefreshKey((k) => k + 1);
-            setCountDelta((d) => d - 1);
           }}
         />
       )}
