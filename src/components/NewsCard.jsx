@@ -20,6 +20,14 @@ function excerpt(text, maxChars = 120) {
     : text.slice(0, maxChars).trimEnd() + "…";
 }
 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+function toAbsolute(url) {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${BASE_URL}${url}`;
+}
+
 // ── Comment inside article drawer ─────────────────────────────────────────────
 function Comment({ comment }) {
   return (
@@ -120,7 +128,7 @@ function ArticleDrawer({ articleId, title, onClose }) {
               {/* Cover photo */}
               {article.photo_url && (
                 <img
-                  src={article.photo_url}
+                  src={toAbsolute(article.photo_url)}
                   alt={article.title}
                   className="article-drawer__photo"
                   loading="lazy"
@@ -187,14 +195,6 @@ export default function NewsCard({ article, featured = false }) {
   const [open, setOpen] = useState(false);
   const dateStr = formatDate(article.published_at ?? article.created_at);
   const bodyExcerpt = excerpt(article.body, featured ? 160 : 110);
-
-  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-
-  function toAbsolute(url) {
-    if (!url) return null;
-    if (url.startsWith("http")) return url;
-    return `${BASE_URL}${url}`;
-  }
 
   return (
     <>
