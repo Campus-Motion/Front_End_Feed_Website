@@ -10,6 +10,7 @@ import {
   joinEventAsGuest,
   getEventGuests,
   leaveEventAsGuest,
+  getLocations,
 } from "../api/client.js";
 import "./EventCard.css";
 
@@ -19,6 +20,16 @@ function formatDate(iso) {
   return new Intl.DateTimeFormat("en-CH", {
     weekday: "short",
     month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+function formatDateLong(iso) {
+  if (!iso) return null;
+  return new Intl.DateTimeFormat("en-CH", {
+    weekday: "long",
+    month: "long",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
@@ -38,10 +49,10 @@ function formatDuration(start, end) {
 }
 function resolveLocation(id, map) {
   if (!id || !map) return null;
-  return map[id] ?? null;
+  return map[id] ?? map[String(id)] ?? null;
 }
 
-// ── localStorage helpers (token per event) ────────────────────────────────────
+// ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = (id) => `cm_guest_${id}`;
 function getSavedJoin(eventId) {
   try {
@@ -57,7 +68,7 @@ function clearJoin(eventId) {
   localStorage.removeItem(LS_KEY(eventId));
 }
 
-// ── Strava icon ───────────────────────────────────────────────────────────────
+// ── Icons ─────────────────────────────────────────────────────────────────────
 function StravaIcon() {
   return (
     <svg
@@ -71,8 +82,6 @@ function StravaIcon() {
     </svg>
   );
 }
-
-// ── Close button ──────────────────────────────────────────────────────────────
 function CloseBtn({ onClose }) {
   return (
     <button className="join-modal__close" onClick={onClose} aria-label="Close">
@@ -90,8 +99,343 @@ function CloseBtn({ onClose }) {
     </button>
   );
 }
+function DetailIcon({ d, className = "event-card__detail-icon" }) {
+  return (
+    <svg
+      className={className}
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={d} />
+    </svg>
+  );
+}
 
-// ── SCREEN 1: Choice ──────────────────────────────────────────────────────────
+// ── Map embed (OpenStreetMap) ─────────────────────────────────────────────────
+function MapEmbed({ lat, lng, label }) {
+  const latN = parseFloat(lat);
+  const lngN = parseFloat(lng);
+  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lngN - 0.01}%2C${latN - 0.008}%2C${lngN + 0.01}%2C${latN + 0.008}&layer=mapnik&marker=${latN}%2C${lngN}`;
+  const linkUrl = `https://www.openstreetmap.org/?mlat=${latN}&mlon=${lngN}#map=15/${latN}/${lngN}`;
+  return (
+    <div className="event-drawer__map-wrapper">
+      <iframe
+        title={`Map: ${label}`}
+        src={url}
+        className="event-drawer__map"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+      <a
+        href={linkUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="event-drawer__map-link"
+      >
+        Open in OpenStreetMap ↗
+      </a>
+    </div>
+  );
+}
+
+// ── Participant row ───────────────────────────────────────────────────────────
+function ParticipantRow({ guest }) {
+  return (
+    <li className="participant-row">
+      <span className="participant-row__avatar">
+        {guest.display_name.charAt(0).toUpperCase()}
+      </span>
+      <div className="participant-row__info">
+        <span className="participant-row__name">{guest.display_name}</span>
+        {guest.telegram && (
+          <a
+            className="participant-row__telegram"
+            href={`https://t.me/${guest.telegram.replace("@", "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {guest.telegram.startsWith("@")
+              ? guest.telegram
+              : `@${guest.telegram}`}
+          </a>
+        )}
+      </div>
+      <span className="participant-row__date">
+        {new Date(guest.created_at).toLocaleDateString("en-CH", {
+          month: "short",
+          day: "numeric",
+        })}
+      </span>
+    </li>
+  );
+}
+
+// ── Event detail drawer ───────────────────────────────────────────────────────
+function EventDrawer({ event, icon, locationMap, onClose, onJoinStateChange }) {
+  const [guests, setGuests] = useState([]);
+  const [guestLoad, setGuestLoad] = useState(true);
+  const [savedJoin, setSavedJoin] = useState(() => getSavedJoin(event.id));
+  const [showJoin, setShowJoin] = useState(false);
+
+  // Resolve location — fallback fetch if locationMap wasn't ready on mount
+  const [mapLoc, setMapLoc] = useState(null);
+
+  useEffect(() => {
+    const startId = event.start_location_id;
+    const endId = event.end_location_id;
+    const id = startId ?? endId;
+    if (!id) return;
+
+    // Try locationMap prop first (may already be populated)
+    const fromProp =
+      resolveLocation(startId, locationMap) ??
+      resolveLocation(endId, locationMap);
+    if (fromProp) {
+      setMapLoc(fromProp);
+      return;
+    }
+
+    // Fallback: fetch directly
+    getLocations({ limit: 100 })
+      .then((res) => {
+        const locs = res?.data ?? [];
+        const found = locs.find((l) => String(l.id) === String(id));
+        if (found) setMapLoc(found);
+      })
+      .catch(() => {});
+  }, [locationMap, event.start_location_id, event.end_location_id]); // re-runs if locationMap populates after mount
+
+  // Derive location label string (for the meta row)
+  const startLoc = resolveLocation(event.start_location_id, locationMap);
+  const endLoc = resolveLocation(event.end_location_id, locationMap);
+
+  const locationStr =
+    startLoc && endLoc
+      ? `${startLoc.label} → ${endLoc.label}`
+      : (startLoc?.label ?? endLoc?.label ?? mapLoc?.label ?? null);
+
+  // Lock body scroll while drawer is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  // Fetch guests
+  const loadGuests = useCallback(async () => {
+    setGuestLoad(true);
+    try {
+      const res = await getEventGuests(event.id);
+      setGuests(Array.isArray(res) ? res : (res?.data ?? []));
+    } catch {
+      /* silent */
+    } finally {
+      setGuestLoad(false);
+    }
+  }, [event.id]);
+
+  useEffect(() => {
+    loadGuests();
+  }, [loadGuests]);
+
+  const isGoing = !!savedJoin;
+
+  function handleJoined(data) {
+    saveJoin(event.id, data);
+    setSavedJoin(data);
+    loadGuests();
+    onJoinStateChange?.(data, "joined");
+  }
+  function handleLeft() {
+    clearJoin(event.id);
+    setSavedJoin(null);
+    loadGuests();
+    onJoinStateChange?.(null, "left");
+  }
+
+  return (
+    <div
+      className="event-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={event.title}
+    >
+      <div
+        className="event-overlay__backdrop"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div className="event-drawer">
+        <div className="event-drawer__handle" aria-hidden="true" />
+
+        <div className="event-drawer__header">
+          <span className="event-drawer__label">Event</span>
+          <button
+            className="event-drawer__close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="event-drawer__scroll">
+          <div className="event-drawer__hero">
+            <span className="event-drawer__icon" aria-hidden="true">
+              {icon}
+            </span>
+            <h2 className="event-drawer__title">{event.title}</h2>
+            <div className="event-drawer__badges">
+              {detectDifficulty(event.distance_m) && (
+                <span
+                  className="event-drawer__badge event-drawer__badge--diff"
+                  style={{
+                    "--diff-color":
+                      DIFFICULTY_COLORS[detectDifficulty(event.distance_m)],
+                  }}
+                >
+                  {DIFFICULTY_LABELS[detectDifficulty(event.distance_m)]}
+                </span>
+              )}
+              <span className="event-drawer__badge">
+                {guests.length} {guests.length === 1 ? "person" : "people"}{" "}
+                going
+              </span>
+            </div>
+          </div>
+
+          <button
+            className={`event-drawer__join-btn${isGoing ? " event-drawer__join-btn--going" : ""}`}
+            onClick={() => setShowJoin(true)}
+          >
+            {isGoing ? "✓ You're going — tap to manage" : "Join this event"}
+          </button>
+
+          <ul className="event-drawer__meta">
+            {event.start_time && (
+              <li>
+                <DetailIcon
+                  d="M3 4h18v18H3V4zm0 6h18M8 2v4M16 2v4"
+                  className="event-drawer__meta-icon"
+                />
+                <div>
+                  <span>{formatDateLong(event.start_time)}</span>
+                  {formatDuration(event.start_time, event.end_time) && (
+                    <span className="event-drawer__meta-sub">
+                      Duration:{" "}
+                      {formatDuration(event.start_time, event.end_time)}
+                    </span>
+                  )}
+                </div>
+              </li>
+            )}
+            {locationStr && (
+              <li>
+                <DetailIcon
+                  d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 10m-3 0a3 3 0 1 0 6 0 3 3 0 0 0-6 0"
+                  className="event-drawer__meta-icon"
+                />
+                <span>{locationStr}</span>
+              </li>
+            )}
+            {event.distance_m && (
+              <li>
+                <DetailIcon
+                  d="M3 12h18M3 6l9-3 9 3M3 18l9 3 9-3"
+                  className="event-drawer__meta-icon"
+                />
+                <span>{formatDistance(event.distance_m)} route</span>
+              </li>
+            )}
+          </ul>
+
+          {event.body && <p className="event-drawer__body">{event.body}</p>}
+
+          {/* Map — shows once mapLoc resolves (handles race condition) */}
+          {mapLoc?.latitude && mapLoc?.longitude && (
+            <section className="event-drawer__section">
+              <h3 className="event-drawer__section-title">Meeting point</h3>
+              <MapEmbed
+                lat={mapLoc.latitude}
+                lng={mapLoc.longitude}
+                label={mapLoc.label}
+              />
+            </section>
+          )}
+
+          {event.strava_url && (
+            <a
+              href={event.strava_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="event-drawer__strava"
+            >
+              <StravaIcon /> View on Strava
+            </a>
+          )}
+
+          <section className="event-drawer__section">
+            <h3 className="event-drawer__section-title">
+              Who's coming ({guests.length})
+            </h3>
+            {guestLoad ? (
+              <div className="event-drawer__guest-skeletons">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="skeleton"
+                    style={{ height: "48px", borderRadius: "8px" }}
+                  />
+                ))}
+              </div>
+            ) : guests.length === 0 ? (
+              <p className="event-drawer__empty">No one yet — be the first!</p>
+            ) : (
+              <ul className="participants-list" role="list">
+                {guests.map((g, i) => (
+                  <ParticipantRow key={g.id ?? i} guest={g} />
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {showJoin && (
+        <JoinModal
+          event={event}
+          icon={icon}
+          savedJoin={savedJoin}
+          onClose={() => setShowJoin(false)}
+          onJoined={handleJoined}
+          onLeft={handleLeft}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Join modal screens ────────────────────────────────────────────────────────
 function ChoiceScreen({ event, icon, onGuest, onSignIn, onClose }) {
   return (
     <>
@@ -113,7 +457,6 @@ function ChoiceScreen({ event, icon, onGuest, onSignIn, onClose }) {
   );
 }
 
-// ── SCREEN 2: Guest form ──────────────────────────────────────────────────────
 function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
   const [name, setName] = useState("");
   const [telegram, setTelegram] = useState("");
@@ -143,7 +486,7 @@ function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
         token: result.token,
       });
     } catch (e) {
-      setError(e.message ?? "Something went wrong, please try again.");
+      setError(e.message ?? "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -166,9 +509,7 @@ function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
         </svg>
       </button>
       <h2 className="join-modal__title">Join as guest</h2>
-      <p className="join-modal__subtitle">
-        No account needed — just leave your name.
-      </p>
+      <p className="join-modal__subtitle">No account needed.</p>
       <form className="join-form" onSubmit={handleSubmit} noValidate>
         <div className="join-form__field">
           <label className="join-form__label" htmlFor="guest-name">
@@ -188,8 +529,7 @@ function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
         </div>
         <div className="join-form__field">
           <label className="join-form__label" htmlFor="guest-telegram">
-            Telegram handle{" "}
-            <span className="join-form__optional">(optional)</span>
+            Telegram <span className="join-form__optional">(optional)</span>
           </label>
           <input
             id="guest-telegram"
@@ -200,9 +540,7 @@ function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
             onChange={(e) => setTelegram(e.target.value)}
             maxLength={34}
           />
-          <span className="join-form__hint">
-            Lets other participants reach you
-          </span>
+          <span className="join-form__hint">Lets others reach you</span>
         </div>
         {error && (
           <p className="join-form__error" role="alert">
@@ -221,17 +559,14 @@ function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
   );
 }
 
-// ── SCREEN 3: Success ─────────────────────────────────────────────────────────
 function SuccessScreen({ event, joinData, onClose }) {
   const [copied, setCopied] = useState(false);
-
   function copyToken() {
     navigator.clipboard.writeText(joinData.token).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   }
-
   return (
     <>
       <CloseBtn onClose={onClose} />
@@ -247,7 +582,6 @@ function SuccessScreen({ event, joinData, onClose }) {
         Registered as <strong>{joinData.display_name}</strong>
         {joinData.telegram_handle && <> · {joinData.telegram_handle}</>}
       </p>
-
       <div className="join-token-box">
         <p className="join-token-box__label">Your leave token — save this!</p>
         <div className="join-token-box__row">
@@ -286,10 +620,9 @@ function SuccessScreen({ event, joinData, onClose }) {
           </button>
         </div>
         <p className="join-token-box__note">
-          Stored in your browser. Use it to cancel your participation.
+          Stored in your browser. Use it to cancel.
         </p>
       </div>
-
       <button
         className="btn btn--ghost btn--full"
         style={{ marginTop: "var(--space-3)" }}
@@ -301,7 +634,6 @@ function SuccessScreen({ event, joinData, onClose }) {
   );
 }
 
-// ── SCREEN 4: Already joined ──────────────────────────────────────────────────
 function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
   const [leaving, setLeaving] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -311,11 +643,15 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
     setLeaving(true);
     setError("");
     try {
-      await leaveEventAsGuest(event.id, savedJoin.token);
+      const t =
+        savedJoin.token && typeof savedJoin.token === "object"
+          ? (savedJoin.token.token ?? JSON.stringify(savedJoin.token))
+          : savedJoin.token;
+      await leaveEventAsGuest(event.id, t);
       clearJoin(event.id);
       onLeave();
     } catch (e) {
-      setError(e.message ?? "Could not remove your participation.");
+      setError(e.message ?? "Could not remove participation.");
     } finally {
       setLeaving(false);
       setConfirm(false);
@@ -333,13 +669,11 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
         Registered as <strong>{savedJoin.display_name}</strong>
         {savedJoin.telegram_handle && <> · {savedJoin.telegram_handle}</>}
       </p>
-
       {error && (
         <p className="join-form__error" role="alert">
           {error}
         </p>
       )}
-
       {!confirm ? (
         <button
           className="btn btn--ghost btn--full"
@@ -350,14 +684,16 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
         </button>
       ) : (
         <div className="join-confirm-leave">
-          <p className="join-confirm-leave__text">
-            Are you sure you want to leave?
-          </p>
+          <p className="join-confirm-leave__text">Are you sure?</p>
           <div className="join-confirm-leave__actions">
             <button
               className={`btn btn--primary${leaving ? " btn--loading" : ""}`}
               onClick={handleLeave}
               disabled={leaving}
+              style={{
+                background: "var(--color-error)",
+                borderColor: "var(--color-error)",
+              }}
             >
               {leaving ? "Leaving…" : "Yes, leave"}
             </button>
@@ -374,20 +710,17 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
   );
 }
 
-// ── JoinModal — orchestrates screens ─────────────────────────────────────────
 function JoinModal({ event, icon, savedJoin, onClose, onJoined, onLeft }) {
   const [screen, setScreen] = useState(savedJoin ? "already" : "choice");
   const [joinData, setJoinData] = useState(null);
-  // Store pending join data in a ref so calling onJoined never triggers a
   const pendingJoin = useRef(null);
 
   function handleGuestSubmit(data) {
     saveJoin(event.id, data);
     setJoinData(data);
     setScreen("success");
-    pendingJoin.current = data; // will be flushed when modal closes
+    pendingJoin.current = data;
   }
-
   function handleClose() {
     if (pendingJoin.current) {
       onJoined(pendingJoin.current);
@@ -444,15 +777,16 @@ function JoinModal({ event, icon, savedJoin, onClose, onJoined, onLeft }) {
   );
 }
 
-// ── Guest participants preview ────────────────────────────────────────────────
+// ── Guest preview (feed card) ─────────────────────────────────────────────────
 function GuestPreview({ eventId, refreshKey, onTotal }) {
   const [guests, setGuests] = useState([]);
 
   const load = useCallback(async () => {
     try {
       const data = await getEventGuests(eventId);
-      setGuests(Array.isArray(data) ? data : (data.data ?? []));
-      if (onTotal) onTotal(data?.meta?.total ?? 0);
+      const list = Array.isArray(data) ? data : (data.data ?? []);
+      setGuests(list);
+      if (onTotal) onTotal(data?.meta?.total ?? list.length);
     } catch {
       /* silent */
     }
@@ -463,7 +797,6 @@ function GuestPreview({ eventId, refreshKey, onTotal }) {
   }, [load, refreshKey]);
 
   if (guests.length === 0) return null;
-
   const visible = guests.slice(0, 3);
   const overflow = guests.length - visible.length;
 
@@ -494,9 +827,13 @@ function GuestPreview({ eventId, refreshKey, onTotal }) {
 
 // ── EventCard ─────────────────────────────────────────────────────────────────
 export default function EventCard({ event, locationMap = {} }) {
+  const [showDrawer, setShowDrawer] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [savedJoin, setSavedJoin] = useState(() => getSavedJoin(event.id));
   const [refreshKey, setRefreshKey] = useState(0);
+  const [participants, setParticipants] = useState(
+    event.participant_count ?? 0,
+  );
 
   const sportTag = detectSportTag(event.title, event.body);
   const icon = (sportTag && SPORT_EMOJIS[sportTag]) ?? "⚡";
@@ -505,9 +842,6 @@ export default function EventCard({ event, locationMap = {} }) {
   const dateStr = formatDate(event.start_time);
   const distanceStr = formatDistance(event.distance_m);
   const durationStr = formatDuration(event.start_time, event.end_time);
-  const [participants, setParticipants] = useState(
-    event.participant_count ?? 0,
-  );
 
   const startLoc = resolveLocation(event.start_location_id, locationMap);
   const endLoc = resolveLocation(event.end_location_id, locationMap);
@@ -519,14 +853,32 @@ export default function EventCard({ event, locationMap = {} }) {
   const stravaUrl = event.strava_url ?? null;
   const isGoing = !!savedJoin;
 
+  function handleJoinStateChange(data, action) {
+    if (action === "joined") {
+      setSavedJoin(data);
+    } else {
+      setSavedJoin(null);
+    }
+    setRefreshKey((k) => k + 1);
+  }
+
   return (
     <>
-      <article className="event-card" tabIndex="0">
-        {/* ── Join button ── */}
+      <article
+        className="event-card"
+        tabIndex="0"
+        onClick={() => setShowDrawer(true)}
+        onKeyDown={(e) => e.key === "Enter" && setShowDrawer(true)}
+        role="button"
+        aria-label={`View details for ${event.title}`}
+      >
         <div className="event-card__join-col">
           <button
             className={`event-card__join-btn${isGoing ? " event-card__join-btn--going" : ""}`}
-            onClick={() => setShowModal(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowModal(true);
+            }}
             aria-label={
               isGoing ? `You're going to ${event.title}` : `Join ${event.title}`
             }
@@ -535,7 +887,6 @@ export default function EventCard({ event, locationMap = {} }) {
           </button>
         </div>
 
-        {/* ── Content ── */}
         <div className="event-card__content">
           <div className="event-card__header">
             <span className="event-card__icon" aria-hidden="true">
@@ -592,12 +943,12 @@ export default function EventCard({ event, locationMap = {} }) {
             )}
           </ul>
 
-          {/* Guest preview row */}
           <GuestPreview
             eventId={event.id}
             refreshKey={refreshKey}
-            onTotal={(total) => setParticipants(total)}
+            onTotal={setParticipants}
           />
+
           {stravaUrl && (
             <div className="event-card__footer">
               <a
@@ -608,13 +959,22 @@ export default function EventCard({ event, locationMap = {} }) {
                 onClick={(e) => e.stopPropagation()}
                 aria-label="View on Strava"
               >
-                <StravaIcon />
-                View on Strava
+                <StravaIcon /> View on Strava
               </a>
             </div>
           )}
         </div>
       </article>
+
+      {showDrawer && (
+        <EventDrawer
+          event={event}
+          icon={icon}
+          locationMap={locationMap}
+          onClose={() => setShowDrawer(false)}
+          onJoinStateChange={handleJoinStateChange}
+        />
+      )}
 
       {showModal && (
         <JoinModal
@@ -633,24 +993,5 @@ export default function EventCard({ event, locationMap = {} }) {
         />
       )}
     </>
-  );
-}
-
-function DetailIcon({ d }) {
-  return (
-    <svg
-      className="event-card__detail-icon"
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={d} />
-    </svg>
   );
 }

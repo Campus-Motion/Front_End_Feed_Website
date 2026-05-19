@@ -136,16 +136,6 @@ export default function FeedPage() {
           </button>
         )}
       </div>
-
-      {/* ── Sticky CTA ── */}
-      <div className="feed-cta-bar">
-        <button
-          className="feed-cta-btn"
-          onClick={() => window.dispatchEvent(new CustomEvent("cm:propose"))}
-        >
-          Propose your own activity
-        </button>
-      </div>
     </div>
   );
 }
