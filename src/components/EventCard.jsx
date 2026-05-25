@@ -667,6 +667,7 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
           : savedJoin.token;
       await leaveEventAsGuest(event.id, t);
       clearJoin(event.id);
+      umami.track("Leave event", { id: event.id, title: event.title });
       onLeave();
     } catch (e) {
       setError(e.message ?? "Could not remove participation.");
@@ -887,18 +888,24 @@ export default function EventCard({ event, locationMap = {} }) {
       <article
         className="event-card"
         tabIndex="0"
-        onClick={() => setShowDrawer(true)}
+        onClick={() => {
+          setShowDrawer(true);
+          umami.track("Open event drawer", {
+            id: event.id,
+            title: event.title,
+          });
+        }}
         onKeyDown={(e) => e.key === "Enter" && setShowDrawer(true)}
         role="button"
         aria-label={`View details for ${event.title}`}
       >
         <div className="event-card__join-col">
           <button
-            data-umami-event="Click on Join button"
             className={`event-card__join-btn${isGoing ? " event-card__join-btn--going" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               setShowModal(true);
+              umami.track("Open join modal", { id: event.id });
             }}
             aria-label={
               isGoing ? `You're going to ${event.title}` : `Join ${event.title}`
@@ -989,7 +996,6 @@ export default function EventCard({ event, locationMap = {} }) {
 
       {showDrawer && (
         <EventDrawer
-          data-umami-event="Open event drawer"
           event={event}
           icon={icon}
           locationMap={locationMap}
@@ -1000,7 +1006,6 @@ export default function EventCard({ event, locationMap = {} }) {
 
       {showModal && (
         <JoinModal
-          data-umami-event="Open join modal"
           event={event}
           icon={icon}
           savedJoin={savedJoin}
