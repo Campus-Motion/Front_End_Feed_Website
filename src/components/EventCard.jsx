@@ -173,10 +173,13 @@ function ParticipantRow({ guest }) {
         )}
       </div>
       <span className="participant-row__date">
-        {new Date(guest.created_at).toLocaleDateString("en-CH", {
-          month: "short",
-          day: "numeric",
-        })}
+        {new Date(guest.created_at ?? guest.joined_at).toLocaleDateString(
+          "en-CH",
+          {
+            month: "short",
+            day: "numeric",
+          },
+        )}
       </span>
     </li>
   );
@@ -552,6 +555,9 @@ function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
           </p>
         )}
         <button
+          data-umami-event="Signup to event"
+          data-umami-event-id={event.id}
+          data-umami-event-guest-name={name}
           className={`btn btn--primary btn--full${loading ? " btn--loading" : ""}`}
           type="submit"
           disabled={loading}
