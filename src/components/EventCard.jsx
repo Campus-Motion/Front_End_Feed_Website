@@ -453,10 +453,18 @@ function ChoiceScreen({ event, icon, onGuest, onSignIn, onClose }) {
       <h2 className="join-modal__title">{event.title}</h2>
       <p className="join-modal__subtitle">How do you want to join?</p>
       <div className="join-modal__actions">
-        <button className="btn btn--primary" onClick={onGuest}>
+        <button
+          data-umami-event="Click on Join as guest"
+          className="btn btn--primary"
+          onClick={onGuest}
+        >
           Join as guest
         </button>
-        <button className="btn btn--ghost" onClick={onSignIn}>
+        <button
+          data-umami-event="Click on Sign in with account"
+          className="btn btn--ghost"
+          onClick={onSignIn}
+        >
           Sign in with account
         </button>
       </div>
@@ -555,7 +563,7 @@ function GuestFormScreen({ event, onSubmit, onBack, onClose }) {
           </p>
         )}
         <button
-          data-umami-event="Signup to event"
+          data-umami-event="Signup to event from card"
           data-umami-event-id={event.id}
           data-umami-event-guest-name={name}
           className={`btn btn--primary btn--full${loading ? " btn--loading" : ""}`}
@@ -886,6 +894,7 @@ export default function EventCard({ event, locationMap = {} }) {
       >
         <div className="event-card__join-col">
           <button
+            data-umami-event="Click on Join button"
             className={`event-card__join-btn${isGoing ? " event-card__join-btn--going" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
@@ -980,6 +989,7 @@ export default function EventCard({ event, locationMap = {} }) {
 
       {showDrawer && (
         <EventDrawer
+          data-umami-event="Open event drawer"
           event={event}
           icon={icon}
           locationMap={locationMap}
@@ -990,6 +1000,7 @@ export default function EventCard({ event, locationMap = {} }) {
 
       {showModal && (
         <JoinModal
+          data-umami-event="Open join modal"
           event={event}
           icon={icon}
           savedJoin={savedJoin}
