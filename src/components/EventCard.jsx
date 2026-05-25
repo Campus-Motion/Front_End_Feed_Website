@@ -52,6 +52,10 @@ function resolveLocation(id, map) {
   return map[id] ?? map[String(id)] ?? null;
 }
 
+function getGuestName(guest) {
+  return guest.display_name || guest.username || "Unknown";
+}
+
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_KEY = (id) => `cm_guest_${id}`;
 function getSavedJoin(eventId) {
@@ -150,10 +154,10 @@ function ParticipantRow({ guest }) {
   return (
     <li className="participant-row">
       <span className="participant-row__avatar">
-        {guest.display_name.charAt(0).toUpperCase()}
+        {getGuestName(guest).charAt(0).toUpperCase()}
       </span>
       <div className="participant-row__info">
-        <span className="participant-row__name">{guest.display_name}</span>
+        <span className="participant-row__name">{getGuestName(guest)}</span>
         {guest.telegram && (
           <a
             className="participant-row__telegram"
@@ -803,22 +807,24 @@ function GuestPreview({ eventId, refreshKey, onTotal }) {
   return (
     <div className="event-card__guests">
       <div className="event-card__guests-avatars">
-        {visible.map((g, i) => (
-          <span
-            key={g.id ?? i}
-            className="event-card__guest-avatar"
-            title={
-              g.telegram_handle
-                ? `${g.display_name} (${g.telegram_handle})`
-                : g.display_name
-            }
-          >
-            {g.display_name.charAt(0).toUpperCase()}
-          </span>
-        ))}
+        {visible.map((g, i) => {
+          const name = getGuestName(g);
+          const initial = name ? name.charAt(0).toUpperCase() : "?";
+          return (
+            <span
+              key={g.id ?? i}
+              className="event-card__guest-avatar"
+              title={
+                g.telegram_handle ? `${name} (${g.telegram_handle})` : name
+              }
+            >
+              {initial}
+            </span>
+          );
+        })}
       </div>
       <span className="event-card__guests-label">
-        {visible.map((g) => g.display_name).join(", ")}
+        {visible.map((g) => getGuestName(g)).join(", ")}
         {overflow > 0 && ` +${overflow} more`}
       </span>
     </div>
