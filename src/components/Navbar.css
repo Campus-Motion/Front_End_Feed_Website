@@ -34,6 +34,16 @@
 
 .navbar__actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
 
+.navbar__user {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
 .navbar__theme-btn {
   display: flex; align-items: center; justify-content: center;
   width: 36px; height: 36px;
