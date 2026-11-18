@@ -1,0 +1,27 @@
+/* ── My events: "Coming up" and "Past" sections ─────────────────── */
+.my-events__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.my-events__section + .my-events__section { margin-top: var(--space-6); }
+
+.my-events__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.my-events__count {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-offset);
+  font-size: var(--text-xs);
+  letter-spacing: 0;
+}

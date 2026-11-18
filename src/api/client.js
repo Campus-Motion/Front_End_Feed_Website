@@ -168,3 +168,26 @@ export function login({ email, password }) {
 export function getMe() {
   return request("/users/me", { auth: true });
 }
+
+/** GET /users/me/events — events the signed-in user joined; { data, meta } */
+export function getMyEvents({ limit = 100, offset = 0, after, before } = {}) {
+  return request(`/users/me/events${qs({ limit, offset, after, before })}`, {
+    auth: true,
+  });
+}
+
+/** POST /events/:id/participants — join as the signed-in user */
+export function joinEventWithAccount(eventId) {
+  return request(`/events/${eventId}/participants`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+/** DELETE /events/:id/participants — leave as the signed-in user */
+export function leaveEventWithAccount(eventId) {
+  return request(`/events/${eventId}/participants`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
