@@ -667,7 +667,7 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
           : savedJoin.token;
       await leaveEventAsGuest(event.id, t);
       clearJoin(event.id);
-      umami.track("Leave event", { id: event.id, title: event.title });
+      window.umami?.track("Leave event", { id: event.id, title: event.title });
       onLeave();
     } catch (e) {
       setError(e.message ?? "Could not remove participation.");
@@ -890,7 +890,7 @@ export default function EventCard({ event, locationMap = {} }) {
         tabIndex="0"
         onClick={() => {
           setShowDrawer(true);
-          umami.track("Open event drawer", {
+          window.umami?.track("Open event drawer", {
             id: event.id,
             title: event.title,
           });
@@ -905,7 +905,7 @@ export default function EventCard({ event, locationMap = {} }) {
             onClick={(e) => {
               e.stopPropagation();
               setShowModal(true);
-              umami.track("Open join modal", { id: event.id });
+              window.umami?.track("Open join modal", { id: event.id });
             }}
             aria-label={
               isGoing ? `You're going to ${event.title}` : `Join ${event.title}`
