@@ -710,8 +710,8 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
               onClick={handleLeave}
               disabled={leaving}
               style={{
-                background: "var(--color-error)",
-                borderColor: "var(--color-error)",
+                background: "var(--color-error, var(--color-primary))",
+                borderColor: "var(--color-error, var(--color-primary))",
               }}
             >
               {leaving ? "Leaving…" : "Yes, leave"}
