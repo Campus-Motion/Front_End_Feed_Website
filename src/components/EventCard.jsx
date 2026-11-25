@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   detectSportTag,
   SPORT_EMOJIS,
@@ -12,6 +13,8 @@ import {
   leaveEventAsGuest,
   getLocations,
 } from "../api/client.js";
+import { useAuth } from "../auth/AuthContext.jsx";
+import { useMyEvents } from "../auth/MyEventsContext.jsx";
 import "./EventCard.css";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -186,7 +189,15 @@ function ParticipantRow({ guest }) {
 }
 
 // ── Event detail drawer ───────────────────────────────────────────────────────
-function EventDrawer({ event, icon, locationMap, onClose, onJoinStateChange }) {
+function EventDrawer({
+  event,
+  icon,
+  locationMap,
+  onClose,
+  onJoinStateChange,
+  onAccountChange,
+}) {
+  const { isJoined } = useMyEvents();
   const [guests, setGuests] = useState([]);
   const [guestLoad, setGuestLoad] = useState(true);
   const [savedJoin, setSavedJoin] = useState(() => getSavedJoin(event.id));
@@ -255,7 +266,7 @@ function EventDrawer({ event, icon, locationMap, onClose, onJoinStateChange }) {
     loadGuests();
   }, [loadGuests]);
 
-  const isGoing = !!savedJoin;
+  const isGoing = !!savedJoin || isJoined(event.id);
 
   function handleJoined(data) {
     saveJoin(event.id, data);
@@ -436,6 +447,10 @@ function EventDrawer({ event, icon, locationMap, onClose, onJoinStateChange }) {
           onClose={() => setShowJoin(false)}
           onJoined={handleJoined}
           onLeft={handleLeft}
+          onAccountChange={() => {
+            loadGuests();
+            onAccountChange?.();
+          }}
         />
       )}
     </div>
@@ -443,7 +458,52 @@ function EventDrawer({ event, icon, locationMap, onClose, onJoinStateChange }) {
 }
 
 // ── Join modal screens ────────────────────────────────────────────────────────
-function ChoiceScreen({ event, icon, onGuest, onSignIn, onClose }) {
+function ChoiceScreen({
+  event,
+  icon,
+  username,
+  joining,
+  error,
+  onAccount,
+  onGuest,
+  onSignIn,
+  onClose,
+}) {
+  if (username) {
+    return (
+      <>
+        <CloseBtn onClose={onClose} />
+        <div className="join-modal__icon" aria-hidden="true">
+          {icon}
+        </div>
+        <h2 className="join-modal__title">{event.title}</h2>
+        <p className="join-modal__subtitle">How do you want to join?</p>
+        {error && (
+          <p className="join-form__error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="join-modal__actions">
+          <button
+            data-umami-event="Click on Join with account"
+            className={`btn btn--primary${joining ? " btn--loading" : ""}`}
+            onClick={onAccount}
+            disabled={joining}
+          >
+            {joining ? "Joining…" : `Join as ${username}`}
+          </button>
+          <button
+            data-umami-event="Click on Join as guest"
+            className="btn btn--ghost"
+            onClick={onGuest}
+            disabled={joining}
+          >
+            Join as guest instead
+          </button>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <CloseBtn onClose={onClose} />
@@ -652,7 +712,14 @@ function SuccessScreen({ event, joinData, onClose }) {
   );
 }
 
-function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
+// `leave` does the actual leaving (guest token or account), then onLeave runs.
+function AlreadyJoinedScreen({
+  registeredAs,
+  telegram,
+  leave,
+  onLeave,
+  onClose,
+}) {
   const [leaving, setLeaving] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState("");
@@ -661,13 +728,7 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
     setLeaving(true);
     setError("");
     try {
-      const t =
-        savedJoin.token && typeof savedJoin.token === "object"
-          ? (savedJoin.token.token ?? JSON.stringify(savedJoin.token))
-          : savedJoin.token;
-      await leaveEventAsGuest(event.id, t);
-      clearJoin(event.id);
-      umami.track("Leave event", { id: event.id, title: event.title });
+      await leave();
       onLeave();
     } catch (e) {
       setError(e.message ?? "Could not remove participation.");
@@ -685,8 +746,8 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
       </div>
       <h2 className="join-modal__title">You're going!</h2>
       <p className="join-modal__subtitle">
-        Registered as <strong>{savedJoin.display_name}</strong>
-        {savedJoin.telegram_handle && <> · {savedJoin.telegram_handle}</>}
+        Registered as <strong>{registeredAs}</strong>
+        {telegram && <> · {telegram}</>}
       </p>
       {error && (
         <p className="join-form__error" role="alert">
@@ -710,8 +771,8 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
               onClick={handleLeave}
               disabled={leaving}
               style={{
-                background: "var(--color-error)",
-                borderColor: "var(--color-error)",
+                background: "var(--color-error, var(--color-primary))",
+                borderColor: "var(--color-error, var(--color-primary))",
               }}
             >
               {leaving ? "Leaving…" : "Yes, leave"}
@@ -729,10 +790,67 @@ function AlreadyJoinedScreen({ event, savedJoin, onLeave, onClose }) {
   );
 }
 
-function JoinModal({ event, icon, savedJoin, onClose, onJoined, onLeft }) {
-  const [screen, setScreen] = useState(savedJoin ? "already" : "choice");
+function JoinModal({
+  event,
+  icon,
+  savedJoin,
+  onClose,
+  onJoined,
+  onLeft,
+  onAccountChange,
+}) {
+  const { status, user } = useAuth();
+  const { isJoined, join, leave } = useMyEvents();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [screen, setScreen] = useState(() =>
+    savedJoin ? "already" : isJoined(event.id) ? "account" : "choice",
+  );
   const [joinData, setJoinData] = useState(null);
+  const [joining, setJoining] = useState(false);
+  const [accountError, setAccountError] = useState("");
   const pendingJoin = useRef(null);
+
+  async function handleAccountJoin() {
+    setJoining(true);
+    setAccountError("");
+    try {
+      await join(event.id);
+      window.umami?.track("Join event with account", { id: event.id });
+      onAccountChange?.();
+      setScreen("account");
+    } catch (e) {
+      setAccountError(
+        e.status === 401
+          ? "Your session has expired. Sign in again to join."
+          : (e.message ?? "Something went wrong."),
+      );
+    } finally {
+      setJoining(false);
+    }
+  }
+
+  async function leaveAsGuest() {
+    const t =
+      savedJoin.token && typeof savedJoin.token === "object"
+        ? (savedJoin.token.token ?? JSON.stringify(savedJoin.token))
+        : savedJoin.token;
+    await leaveEventAsGuest(event.id, t);
+    clearJoin(event.id);
+    window.umami?.track("Leave event", { id: event.id, title: event.title });
+  }
+
+  async function leaveAsAccount() {
+    await leave(event.id);
+    window.umami?.track("Leave event", { id: event.id, title: event.title });
+  }
+
+  function goToSignIn() {
+    const here = location.pathname;
+    navigate(
+      here === "/" ? "/signin" : `/signin?next=${encodeURIComponent(here)}`,
+    );
+  }
 
   function handleGuestSubmit(data) {
     saveJoin(event.id, data);
@@ -760,8 +878,12 @@ function JoinModal({ event, icon, savedJoin, onClose, onJoined, onLeft }) {
           <ChoiceScreen
             event={event}
             icon={icon}
+            username={status === "signedIn" ? user.username : null}
+            joining={joining}
+            error={accountError}
+            onAccount={handleAccountJoin}
             onGuest={() => setScreen("form")}
-            onSignIn={() => (window.location.hash = "login")}
+            onSignIn={goToSignIn}
             onClose={handleClose}
           />
         )}
@@ -782,10 +904,22 @@ function JoinModal({ event, icon, savedJoin, onClose, onJoined, onLeft }) {
         )}
         {screen === "already" && (
           <AlreadyJoinedScreen
-            event={event}
-            savedJoin={savedJoin}
+            registeredAs={savedJoin.display_name}
+            telegram={savedJoin.telegram_handle}
+            leave={leaveAsGuest}
             onLeave={() => {
               onLeft();
+              handleClose();
+            }}
+            onClose={handleClose}
+          />
+        )}
+        {screen === "account" && (
+          <AlreadyJoinedScreen
+            registeredAs={user?.username}
+            leave={leaveAsAccount}
+            onLeave={() => {
+              onAccountChange?.();
               handleClose();
             }}
             onClose={handleClose}
@@ -848,6 +982,7 @@ function GuestPreview({ eventId, refreshKey, onTotal }) {
 
 // ── EventCard ─────────────────────────────────────────────────────────────────
 export default function EventCard({ event, locationMap = {} }) {
+  const { isJoined } = useMyEvents();
   const [showDrawer, setShowDrawer] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [savedJoin, setSavedJoin] = useState(() => getSavedJoin(event.id));
@@ -872,7 +1007,8 @@ export default function EventCard({ event, locationMap = {} }) {
       : (startLoc?.label ?? endLoc?.label ?? null);
 
   const stravaUrl = event.strava_url ?? null;
-  const isGoing = !!savedJoin;
+  const isGoing = !!savedJoin || isJoined(event.id);
+  const refreshParticipants = () => setRefreshKey((k) => k + 1);
 
   function handleJoinStateChange(data, action) {
     if (action === "joined") {
@@ -890,7 +1026,7 @@ export default function EventCard({ event, locationMap = {} }) {
         tabIndex="0"
         onClick={() => {
           setShowDrawer(true);
-          umami.track("Open event drawer", {
+          window.umami?.track("Open event drawer", {
             id: event.id,
             title: event.title,
           });
@@ -905,7 +1041,7 @@ export default function EventCard({ event, locationMap = {} }) {
             onClick={(e) => {
               e.stopPropagation();
               setShowModal(true);
-              umami.track("Open join modal", { id: event.id });
+              window.umami?.track("Open join modal", { id: event.id });
             }}
             aria-label={
               isGoing ? `You're going to ${event.title}` : `Join ${event.title}`
@@ -1001,6 +1137,7 @@ export default function EventCard({ event, locationMap = {} }) {
           locationMap={locationMap}
           onClose={() => setShowDrawer(false)}
           onJoinStateChange={handleJoinStateChange}
+          onAccountChange={refreshParticipants}
         />
       )}
 
@@ -1018,6 +1155,7 @@ export default function EventCard({ event, locationMap = {} }) {
             setSavedJoin(null);
             setRefreshKey((k) => k + 1);
           }}
+          onAccountChange={refreshParticipants}
         />
       )}
     </>

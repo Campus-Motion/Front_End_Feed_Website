@@ -1,7 +1,8 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import "./Navbar.css";
 import logoSrc from "../images/logo_rouge.png";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 // ── Inline SVG logo matching Campus Motion style ─────────────────────────────
 
@@ -117,13 +118,129 @@ function IconWebsite() {
 // ── Link to the main Campus Motion website ───────────────────────────────────
 const WEBSITE_URL = "https://campusmotion.ch";
 
+function IconUser() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </svg>
+  );
+}
+
+function IconMyEvents() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4" />
+    </svg>
+  );
+}
+
+// Sign-in link that brings the user back to the page they were on.
+function signInPath(pathname) {
+  const onAuthPage = pathname === "/signin" || pathname === "/signup";
+  return onAuthPage || pathname === "/"
+    ? "/signin"
+    : `/signin?next=${encodeURIComponent(pathname)}`;
+}
+
+// ── Account: "Sign in" when signed out, username + "Sign out" when signed in ──
+// Signing out on a page that needs an account goes back to the feed, instead
+// of that page sending you to the sign-in form.
+function useSignOut(pathname) {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  return () => {
+    signOut();
+    if (pathname === "/my-events") navigate("/", { replace: true });
+  };
+}
+
+function AccountActions({ pathname }) {
+  const { status, user } = useAuth();
+  const signOut = useSignOut(pathname);
+  // While a stored session is checked, show nothing rather than a wrong state.
+  if (status === "loading") return null;
+  if (status === "signedIn") {
+    return (
+      <>
+        <span className="navbar__user" title={user.username}>
+          {user.username}
+        </span>
+        <button className="navbar__link" onClick={signOut}>
+          Sign out
+        </button>
+      </>
+    );
+  }
+  return (
+    <NavLink
+      to={signInPath(pathname)}
+      className={({ isActive }) =>
+        `navbar__link${isActive ? " navbar__link--active" : ""}`
+      }
+    >
+      Sign in
+    </NavLink>
+  );
+}
+
+function AccountTab({ pathname }) {
+  const { status } = useAuth();
+  const signOut = useSignOut(pathname);
+  if (status === "loading") return null;
+  if (status === "signedIn") {
+    return (
+      <button className="bottom-nav__item" onClick={signOut}>
+        <IconUser />
+        <span className="bottom-nav__label">Sign out</span>
+      </button>
+    );
+  }
+  return (
+    <NavLink
+      to={signInPath(pathname)}
+      className={({ isActive }) =>
+        `bottom-nav__item${isActive ? " bottom-nav__item--active" : ""}`
+      }
+    >
+      <IconUser />
+      <span className="bottom-nav__label">Sign in</span>
+    </NavLink>
+  );
+}
+
 // ── Navbar ────────────────────────────────────────────────────────────────────
 export default function Navbar() {
   const location = useLocation();
+  const { status } = useAuth();
 
   const links = [
     { to: "/", label: "Events", Icon: IconFeed },
     { to: "/news", label: "News", Icon: IconNews },
+    ...(status === "signedIn"
+      ? [{ to: "/my-events", label: "My events", Icon: IconMyEvents }]
+      : []),
   ];
 
   return (
@@ -159,6 +276,7 @@ export default function Navbar() {
             <span aria-hidden="true">↗</span>
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
+          <AccountActions pathname={location.pathname} />
           <ThemeToggle />
         </div>
       </header>
@@ -189,6 +307,7 @@ export default function Navbar() {
           <span className="bottom-nav__label">Website</span>
           <span className="sr-only"> (opens in a new tab)</span>
         </a>
+        <AccountTab pathname={location.pathname} />
         <div className="bottom-nav__item bottom-nav__theme">
           <ThemeToggle />
           <span className="bottom-nav__label">Theme</span>

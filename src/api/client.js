@@ -1,22 +1,67 @@
 /**
  * Campus Motion — API Client
- * All public endpoints (no JWT required).
+ * Public endpoints need no JWT; the account endpoints at the bottom send the
+ * token stored at sign-in.
  * Base URL is read from VITE_API_BASE_URL env variable.
  */
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const TOKEN_KEY = "cm_access_token";
 
-async function request(path, options = {}) {
+/** Error thrown for a non-2xx response; `status` is the HTTP status. */
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+// ── Token storage ─────────────────────────────────────────────────────────────
+// localStorage can throw (private mode, blocked storage): treat that as signed out.
+export function getToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token) {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    // The session then only lasts until the page is reloaded.
+  }
+}
+
+export function clearToken() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Nothing stored, nothing to clear.
+  }
+}
+
+async function request(path, { auth = false, ...options } = {}) {
   const url = `${BASE_URL}${path}`;
+  const token = auth ? getToken() : null;
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   });
   if (!res.ok) {
     const err = await res
       .json()
       .catch(() => ({ message: `HTTP ${res.status}` }));
-    throw new Error(err.message ?? `HTTP ${res.status}`);
+    // Validation errors come back as an array of messages, one per field.
+    const message = Array.isArray(err.message)
+      ? err.message.join(". ")
+      : err.message;
+    throw new ApiError(message ?? `HTTP ${res.status}`, res.status);
   }
   return res.json();
 }
@@ -99,5 +144,50 @@ export function leaveEventAsGuest(eventId, token) {
       : token;
   return request(`/events/${eventId}/guest_participants/?token=${t}`, {
     method: "DELETE",
+  });
+}
+
+// ── Account ───────────────────────────────────────────────────────────────────
+/** POST /auth/register — create an account; returns { message, userId } */
+export function register({ username, email, password }) {
+  return request("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, email, password }),
+  });
+}
+
+/** POST /auth/login — returns { access_token, role } */
+export function login({ email, password }) {
+  return request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+/** GET /users/me — profile of the signed-in user (needs the stored token) */
+export function getMe() {
+  return request("/users/me", { auth: true });
+}
+
+/** GET /users/me/events — events the signed-in user joined; { data, meta } */
+export function getMyEvents({ limit = 100, offset = 0, after, before } = {}) {
+  return request(`/users/me/events${qs({ limit, offset, after, before })}`, {
+    auth: true,
+  });
+}
+
+/** POST /events/:id/participants — join as the signed-in user */
+export function joinEventWithAccount(eventId) {
+  return request(`/events/${eventId}/participants`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+/** DELETE /events/:id/participants — leave as the signed-in user */
+export function leaveEventWithAccount(eventId) {
+  return request(`/events/${eventId}/participants`, {
+    method: "DELETE",
+    auth: true,
   });
 }
