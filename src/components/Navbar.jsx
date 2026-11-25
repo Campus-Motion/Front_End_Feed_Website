@@ -267,7 +267,7 @@ export default function Navbar() {
         <div className="navbar__actions">
           <a
             href={WEBSITE_URL}
-            className="navbar__website"
+            className="navbar__link navbar__website"
             target="_blank"
             rel="noopener noreferrer"
             data-umami-event="Click on website link"

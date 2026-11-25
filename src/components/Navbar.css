@@ -34,15 +34,8 @@
 
 .navbar__actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
 
-.navbar__website {
-  display: flex; align-items: center; gap: var(--space-1);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-}
-.navbar__website:hover { color: var(--color-text); background: var(--color-surface-offset); }
+/* Website link: same look as .navbar__link, plus room for the ↗ arrow. */
+.navbar__website { display: flex; align-items: center; gap: var(--space-1); }
 
 .navbar__user {
   max-width: 16ch;
