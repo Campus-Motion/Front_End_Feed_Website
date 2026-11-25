@@ -96,6 +96,27 @@ function IconNews() {
     </svg>
   );
 }
+function IconWebsite() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
+}
+
+// ── Link to the main Campus Motion website ───────────────────────────────────
+const WEBSITE_URL = "https://campusmotion.ch";
 
 function IconUser() {
   return (
@@ -244,6 +265,17 @@ export default function Navbar() {
           ))}
         </nav>
         <div className="navbar__actions">
+          <a
+            href={WEBSITE_URL}
+            className="navbar__link navbar__website"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-umami-event="Click on website link"
+          >
+            Website
+            <span aria-hidden="true">↗</span>
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
           <AccountActions pathname={location.pathname} />
           <ThemeToggle />
         </div>
@@ -264,6 +296,17 @@ export default function Navbar() {
             <span className="bottom-nav__label">{label}</span>
           </NavLink>
         ))}
+        <a
+          href={WEBSITE_URL}
+          className="bottom-nav__item"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-umami-event="Click on website link"
+        >
+          <IconWebsite />
+          <span className="bottom-nav__label">Website</span>
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
         <AccountTab pathname={location.pathname} />
         <div className="bottom-nav__item bottom-nav__theme">
           <ThemeToggle />
