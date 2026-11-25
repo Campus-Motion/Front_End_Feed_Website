@@ -6,10 +6,16 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * Where to go after signing in: the `next` query parameter if it is a path
  * on this site, else the feed. Rejects "//host" and full URLs so the link
- * can't send people to another site.
+ * can't send people to another site. Backslashes and control characters are
+ * rejected too: browsers read "/\host" and "/<tab>/host" as "//host".
  */
 export function safeNext(next) {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  return next &&
+    next.startsWith("/") &&
+    !next.startsWith("//") &&
+    !/[\\\u0000-\u001f]/.test(next)
+    ? next
+    : "/";
 }
 
 /** Field errors for the sign-in form; empty object when it can be sent. */
